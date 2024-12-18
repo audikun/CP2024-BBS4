@@ -176,21 +176,25 @@ function createPostElement(post) {
                 ${actions}
             </div>
             <div class="post-content">${escapeHtml(post.content)}</div>
-            <div class="comments-container" id="comments-${post.id}">
-                <!-- コメント表示エリア -->
-                <div class="comment-list" id="commentList-${post.id}"></div>
-                <!-- コメント入力エリア -->
-                <textarea id="commentInput-${post.id}" class="comment-input" placeholder="コメントを入力してください"></textarea>
-                <button onclick="createComment('${post.id}')" class="btn-comment">コメントする</button>
+            <div class="comments-section">
+                <div class="comments-list" id="comments-${post.id}">
+                <p>【コメント欄】</p>
+                    <!-- コメントがここに表示される -->
+                </div>
+                <div id="comments-container-${post.id}" class="comments-container"></div>
+                <input type="text" id="comment-input-${post.id}" placeholder="コメントを入力してください">
+                <button onclick="postComment('${post.id}')">コメントする</button>
             </div>
+            
+
             <div class="post-footer">
                 <span class="post-time">${formatTimestamp(post.timestamp)}</span>
                 ${post.updatedAt ? `<span class="post-updated">(編集済み: ${formatTimestamp(post.updatedAt)})</span>` : ''}
             </div>
+            
         </div>
     `;
 }
-
 
 // 投稿の表示処理
 function renderPosts(posts) {
@@ -206,6 +210,69 @@ function renderPosts(posts) {
         postsDiv.append(createPostElement(post));
     });
 }
+
+// コメントを投稿する関数
+function postComment(postId) {
+  const commentInput = document.getElementById(`comment-input-${postId}`);
+  const commentText = commentInput.value.trim();
+
+  // コメントが空の場合は何もしない
+  if (commentText === "") {
+    return;
+  }
+
+  // コメントデータを作成
+  const commentData = {
+    text: commentText,
+    date: new Date().toLocaleString(), // コメントの日付
+  };
+
+  // コメントを表示する領域を取得
+  const commentsContainer = document.getElementById(`comments-container-${postId}`);
+
+  // コメントをHTMLに追加
+  const commentElement = document.createElement("div");
+  commentElement.className = "comment";
+  commentElement.innerHTML = `
+    <p>${commentData.text}</p>
+    <small>${commentData.date}</small>
+  `;
+  commentsContainer.appendChild(commentElement);
+
+  // 入力をクリア
+  commentInput.value = "";
+
+  // Firebaseにコメントを保存
+  const postCommentsRef = firebase.database().ref(`comments/${postId}`);
+  postCommentsRef.push(commentData).catch((error) => {
+    console.error("コメントの保存に失敗しました:", error);
+  });
+}
+
+
+
+// 投稿のコメントを読み込む関数
+function loadComments(postId) {
+  const postCommentsRef = firebase.database().ref(`comments/${postId}`);
+  const commentsList = document.getElementById(`comments-${postId}`);
+  commentsList.innerHTML = ""; // 一旦クリア
+
+  postCommentsRef.on("value", (snapshot) => {
+    const comments = snapshot.val();
+    if (comments) {
+      Object.values(comments).forEach((comment) => {
+        const commentElement = document.createElement("div");
+        commentElement.className = "comment";
+        commentElement.innerHTML = `
+          <p>${comment.text}</p>
+          <span class="comment-date">${comment.date}</span>
+        `;
+        commentsList.appendChild(commentElement);
+      });
+    }
+  });
+}
+
 
 // 投稿の読み込みとコメントのレンダリングを追加
 function loadPosts() {
@@ -249,12 +316,12 @@ function loadPosts() {
 
         $('#loadingSpinner').hide();
     }, (error) => {
-        console.error('Data fetch error:', error);
+        console.error('Data fetch error:', error); 
         showMessage('データの読み込みに失敗しました', 'error');
         $('#loadingSpinner').hide();
     });
+    loadComments(post.id);
 }
-
 
 // モーダル関連の関数
 function showModal(modalId) {
@@ -610,6 +677,7 @@ window.addEventListener('unload', function() {
                     <option value="oldest">古い順</option>
                 </select>
             </div>
+            
             <div id="postsList"></div>
             <div id="loadingSpinner" class="loading-spinner" style="display: none;">
                 <div class="spinner"></div>
@@ -617,6 +685,7 @@ window.addEventListener('unload', function() {
             </div>
         </div>
     </div>
+    
 
     <!-- 編集モーダルウィンドウ -->
     <div id="editModal" class="modal">
