@@ -168,7 +168,6 @@ function createPostElement(post) {
             <button class="btn-delete" onclick="deletePost('${post.id}')">削除</button>
         </div>
     ` : '';
-
     return `
         <div class="post" id="post-${post.id}">
             <div class="post-header">
@@ -178,15 +177,12 @@ function createPostElement(post) {
             <div class="post-content">${escapeHtml(post.content)}</div>
             <div class="comments-section">
                 <div class="comments-list" id="comments-${post.id}">
-                <p>【コメント欄】</p>
-                    <!-- コメントがここに表示される -->
-                </div>
+                <p>＿【コメント欄】＿＿＿＿＿＿＿＿＿</p></div>
                 <div id="comments-container-${post.id}" class="comments-container"></div>
                 <input type="text" id="comment-input-${post.id}" placeholder="コメントを入力してください">
                 <button onclick="postComment('${post.id}')">コメントする</button>
             </div>
             
-
             <div class="post-footer">
                 <span class="post-time">${formatTimestamp(post.timestamp)}</span>
                 ${post.updatedAt ? `<span class="post-updated">(編集済み: ${formatTimestamp(post.updatedAt)})</span>` : ''}
@@ -216,38 +212,48 @@ function postComment(postId) {
   const commentInput = document.getElementById(`comment-input-${postId}`);
   const commentText = commentInput.value.trim();
 
-  // コメントが空の場合は何もしない
   if (commentText === "") {
-    return;
+    return; // コメントが空の場合は何もしない
   }
 
-  // コメントデータを作成
+  // Firebaseデータベースにコメントを保存
   const commentData = {
     text: commentText,
-    date: new Date().toLocaleString(), // コメントの日付
+    timestamp: new Date().toISOString(),
   };
 
-  // コメントを表示する領域を取得
-  const commentsContainer = document.getElementById(`comments-container-${postId}`);
+  firebase.database().ref(`posts/${postId}/comments`).push(commentData)
+    .then(() => {
+      // コメントを画面に追加
+      const commentsContainer = document.getElementById(`comments-container-${postId}`);
+      
+      // コメント要素を作成
+      const commentElement = document.createElement("div");
+      commentElement.style.marginBottom = "10px";
 
-  // コメントをHTMLに追加
-  const commentElement = document.createElement("div");
-  commentElement.className = "comment";
-  commentElement.innerHTML = `
-    <p>${commentData.text}</p>
-    <small>${commentData.date}</small>
-  `;
-  commentsContainer.appendChild(commentElement);
+      const commentTextElement = document.createElement("p");
+      commentTextElement.textContent = commentData.text;
 
-  // 入力をクリア
-  commentInput.value = "";
+      const commentDateElement = document.createElement("p");
+      commentDateElement.textContent = new Date(commentData.timestamp).toLocaleString();
+      commentDateElement.style.fontSize = "0.9em";
+      commentDateElement.style.color = "gray";
 
-  // Firebaseにコメントを保存
-  const postCommentsRef = firebase.database().ref(`comments/${postId}`);
-  postCommentsRef.push(commentData).catch((error) => {
-    console.error("コメントの保存に失敗しました:", error);
-  });
+      // コメント要素に子要素を追加
+      commentElement.appendChild(commentTextElement);
+      commentElement.appendChild(commentDateElement);
+
+      // コメントをコンテナの最後に追加
+      commentsContainer.appendChild(commentElement);
+
+      // コメント入力欄を空にする
+      commentInput.value = "";
+    })
+    .catch((error) => {
+      console.error("コメントの送信に失敗しました: ", error);
+    });
 }
+
 
 
 
