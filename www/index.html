@@ -206,6 +206,32 @@ function renderPosts(posts) {
         postsDiv.append(createPostElement(post));
     });
 }
+function renderPost(postId, post) {
+    const postHtml = `
+        <div class="post" id="post-${postId}">
+            <div class="post-header">
+                <span class="post-author">${escapeHtml(post.author)}</span>
+                <span class="post-time">${formatTimestamp(post.createdAt)}</span>
+            </div>
+            <div class="post-content">${escapeHtml(post.content)}</div>
+            <div class="post-footer">
+                <button onclick="startEdit('${postId}')">編集</button>
+                <button onclick="deletePost('${postId}')">削除</button>
+            </div>
+            <div class="comments">
+                <h4>コメント</h4>
+                <div id="commentList-${postId}"></div>
+                <textarea id="commentInput-${postId}" placeholder="コメントを入力"></textarea>
+                <button onclick="createComment('${postId}')">コメントを追加</button>
+            </div>
+        </div>
+    `;
+    $('#postsList').append(postHtml);
+
+    // コメントをロード
+    loadComments(postId);
+}
+
 
 // コメントを投稿する関数
 function postComment(postId) {
@@ -254,30 +280,92 @@ function postComment(postId) {
     });
 }
 
+document.addEventListener("DOMContentLoaded", function () {
+  // Firebaseから投稿ごとにコメントを取得して表示する処理
+  firebase.database().ref("posts").once("value", (snapshot) => {
+    const posts = snapshot.val();
+    if (posts) {
+      Object.keys(posts).forEach((postId) => {
+        const post = posts[postId];
+        const commentsContainer = document.getElementById(`comments-container-${postId}`);
+
+        // Firebaseのコメントを取得して画面に表示
+        if (post.comments) {
+          Object.values(post.comments).forEach((comment) => {
+            const commentElement = document.createElement("div");
+            commentElement.style.marginBottom = "10px";
+
+            const commentTextElement = document.createElement("p");
+            commentTextElement.textContent = comment.text;
+
+            const commentDateElement = document.createElement("p");
+            commentDateElement.textContent = new Date(comment.timestamp).toLocaleString();
+            commentDateElement.style.fontSize = "0.9em";
+            commentDateElement.style.color = "gray";
+
+            commentElement.appendChild(commentTextElement);
+            commentElement.appendChild(commentDateElement);
+
+            commentsContainer.appendChild(commentElement);
+          });
+        }
+      });
+    }
+  });
+
+  // リアルタイムでコメントを監視して更新する処理
+  firebase.database().ref("posts").on("child_changed", (snapshot) => {
+    const postId = snapshot.key;
+    const post = snapshot.val();
+    const commentsContainer = document.getElementById(`comments-container-${postId}`);
+
+    // コメントエリアをクリアして再描画
+    commentsContainer.innerHTML = "";
+
+    if (post.comments) {
+      Object.values(post.comments).forEach((comment) => {
+        const commentElement = document.createElement("div");
+        commentElement.style.marginBottom = "10px";
+
+        const commentTextElement = document.createElement("p");
+        commentTextElement.textContent = comment.text;
+
+        const commentDateElement = document.createElement("p");
+        commentDateElement.textContent = new Date(comment.timestamp).toLocaleString();
+        commentDateElement.style.fontSize = "0.9em";
+        commentDateElement.style.color = "gray";
+
+        commentElement.appendChild(commentTextElement);
+        commentElement.appendChild(commentDateElement);
+
+        commentsContainer.appendChild(commentElement);
+      });
+    }
+  });
+});
+
+
 
 
 
 // 投稿のコメントを読み込む関数
 function loadComments(postId) {
-  const postCommentsRef = firebase.database().ref(`comments/${postId}`);
-  const commentsList = document.getElementById(`comments-${postId}`);
-  commentsList.innerHTML = ""; // 一旦クリア
+    const commentRef = postsRef.child(postId).child('comments');
 
-  postCommentsRef.on("value", (snapshot) => {
-    const comments = snapshot.val();
-    if (comments) {
-      Object.values(comments).forEach((comment) => {
-        const commentElement = document.createElement("div");
-        commentElement.className = "comment";
-        commentElement.innerHTML = `
-          <p>${comment.text}</p>
-          <span class="comment-date">${comment.date}</span>
-        `;
-        commentsList.appendChild(commentElement);
-      });
-    }
-  });
+    commentRef.on('value', (snapshot) => {
+        const comments = [];
+        snapshot.forEach((childSnapshot) => {
+            const comment = childSnapshot.val();
+            comments.push({
+                ...comment,
+                id: childSnapshot.key,
+            });
+        });
+
+        renderComments(postId, comments);
+    });
 }
+
 
 
 // 投稿の読み込みとコメントのレンダリングを追加
@@ -537,24 +625,26 @@ function createComment(postId) {
     const commentData = {
         author: currentUser.email,
         content: commentContent,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
     };
 
+    // コメントをFirebaseに追加 (pushを利用)
     const commentRef = postsRef.child(postId).child('comments');
     commentRef.push(commentData)
         .then(() => {
             showMessage('コメントが追加されました');
-            commentInput.val('');
+            commentInput.val(''); // 入力フィールドをクリア
         })
         .catch((error) => {
             showMessage('コメントの追加に失敗しました: ' + error.message, 'error');
         });
 }
 
+
 // コメントを表示する
 function renderComments(postId, comments) {
     const commentList = $(`#commentList-${postId}`);
-    commentList.empty();
+    commentList.empty(); // リストを初期化
 
     comments.forEach((comment) => {
         const commentHtml = `
@@ -567,6 +657,7 @@ function renderComments(postId, comments) {
         commentList.append(commentHtml);
     });
 }
+
 
 
 
